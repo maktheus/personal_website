@@ -138,32 +138,31 @@ export default function CameraAudioCanvas() {
             const posX = x * step;
             const posY = y * step;
             
-            // Death stranding displacement: floating upwards with audio
+            // Death stranding / Infinity lights displacement: floating upwards with audio
             const waveY = Math.sin(x * 0.1 + time) * (audioVolume * 30);
             
             const renderX = posX;
-            const renderY = posY + waveY;
+            const renderY = posY + waveY - (time * 10) % H; // Continuous floating effect
+            const wrappedY = renderY < 0 ? renderY + H : renderY;
 
-            // Chiral Gold fading to Dark base
+            // Chiral Gold fading to Dark base - Glowing Lantern effect
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = `rgba(229, 178, 26, ${audioVolume * 0.8 + 0.2})`;
+
             ctx.beginPath();
             
-            // The louder it is, the larger the dots. Brighter pixels are bigger.
+            // Draw slightly elongated rectangles or circles like lanterns
             const baseRadius = bNorm * 4;
             const audioRadius = audioVolume * 10 * bNorm;
-            ctx.arc(renderX + step/2, renderY + step/2, baseRadius + audioRadius, 0, Math.PI * 2);
+            const size = baseRadius + audioRadius;
             
-            ctx.fillStyle = `rgba(229, 178, 26, ${(bNorm * 0.8) + (audioVolume * 0.5)})`;
+            // Draw a lantern-like shape (rounded rect)
+            ctx.roundRect(renderX + step/2 - size, wrappedY + step/2 - size * 1.5, size * 2, size * 3, size / 2);
+            
+            ctx.fillStyle = `rgba(229, 178, 26, ${(bNorm * 0.9) + (audioVolume * 0.5)})`;
             ctx.fill();
 
-            // Connect neighboring strong points to form "Odradek scanning lines"
-            if (bNorm > 0.6 && audioVolume > 0.4 && Math.random() > 0.95) {
-              ctx.beginPath();
-              ctx.moveTo(renderX + step/2, renderY + step/2);
-              ctx.lineTo(renderX + step/2 + (Math.random() - 0.5) * 100, renderY + step/2 + (Math.random() - 0.5) * 100);
-              ctx.strokeStyle = `rgba(229, 178, 26, ${audioVolume * 0.4})`;
-              ctx.lineWidth = 1;
-              ctx.stroke();
-            }
+            ctx.shadowBlur = 0; // reset
           }
         }
       }
