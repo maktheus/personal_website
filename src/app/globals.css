@@ -144,10 +144,36 @@ body::before {
   transform: translateY(28px);
   transition: opacity 0.65s ease, transform 0.65s ease;
 }
-
 .fade-up.visible {
   opacity: 1;
   transform: translateY(0);
+}
+
+/* ─── Hero clip-path reveal (Lando Norris style) ─────────── */
+.clip-reveal {
+  clip-path: inset(0 0 100% 0);
+  opacity: 0;
+  transform: translateY(16px);
+  transition: clip-path 0.75s cubic-bezier(0.65, 0.05, 0, 1),
+              opacity 0.5s ease,
+              transform 0.75s cubic-bezier(0.65, 0.05, 0, 1);
+}
+.clip-reveal.revealed {
+  clip-path: inset(0 0 0% 0);
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ─── Scroll line indicator ──────────────────────────────── */
+.scroll-line {
+  width: 1px;
+  height: 48px;
+  background: linear-gradient(180deg, var(--accent) 0%, transparent 100%);
+  animation: scrollPulse 2s ease-in-out infinite;
+}
+@keyframes scrollPulse {
+  0%, 100% { opacity: 0.3; transform: scaleY(0.6); transform-origin: top; }
+  50%       { opacity: 1;   transform: scaleY(1);   transform-origin: top; }
 }
 
 /* ─── Tag pill ───────────────────────────────────────────── */
@@ -213,10 +239,55 @@ body::before {
   border: 1px solid var(--border-color);
   border-radius: 12px;
   padding: 1.5rem;
-  transition: border-color 0.2s ease, transform 0.2s ease;
+  transition: border-color 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
 }
-
 .card:hover {
   border-color: var(--border-accent);
-  transform: translateY(-2px);
+  transform: translateY(-3px);
+  box-shadow: 0 12px 40px rgba(229,178,26,0.07);
+}
+
+/* ─── Career chapter card ────────────────────────────────── */
+.chapter-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 16px;
+  border: 1px solid var(--border-color);
+  transition: border-color 0.3s ease, transform 0.3s ease;
+}
+.chapter-card:hover {
+  border-color: var(--border-accent);
+  transform: translateY(-4px);
+}
+.chapter-card-bg {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  transition: transform 0.6s cubic-bezier(0.65, 0.05, 0, 1);
+}
+.chapter-card:hover .chapter-card-bg {
+  transform: scale(1.04);
+}
+
+/* ─── Partner badge ──────────────────────────────────────── */
+.partner-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem 1.5rem;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  background: var(--bg-card);
+  transition: border-color 0.2s, color 0.2s, background 0.2s;
+  white-space: nowrap;
+}
+.partner-badge:hover {
+  border-color: var(--border-accent);
+  color: var(--accent);
+  background: var(--accent-dim);
 }

@@ -99,10 +99,20 @@ export const experiences: Experience[] = [
 
 export const projects: Project[] = [
   {
+    title: "Aqua Monitor",
+    description: "Real-time IoT water quality monitoring for fish farming with AI assistant.",
+    longDescription:
+      "Mobile app (Ionic React + Firebase) monitoring pH, temperature, turbidity and TDS via ESP32 sensors over MQTT. Includes historical charts, remote commands, and an Ollama-powered AI chatbot for guidance.",
+    tags: ["Ionic React", "TypeScript", "Firebase", "MQTT", "ESP32", "Ollama", "Recharts"],
+    githubUrl: "https://github.com/maktheus/aqua-monitor",
+    imageUrl: "https://raw.githubusercontent.com/maktheus/aqua-monitor/main/images/Home-inicial.png",
+    featured: true,
+  },
+  {
     title: "Game-concurso",
     description: "Gamified roguelike review application with E2E testing and live deployment.",
     longDescription:
-      "A production-quality gamified review app built with TypeScript and Vite. Features mobile-first design, comprehensive testing strategy (unit, integration, E2E, accessibility), and is deployed live on GitHub Pages.",
+      "Production-quality gamified review app with TypeScript and Vite. Mobile-first design, comprehensive testing (unit, integration, E2E, accessibility), deployed live on GitHub Pages.",
     tags: ["TypeScript", "Vite", "Testing", "GitHub Pages", "Mobile-first"],
     githubUrl: "https://github.com/maktheus/Game-concurso",
     liveUrl: "https://maktheus.github.io/Game-concurso/",
@@ -112,7 +122,7 @@ export const projects: Project[] = [
     title: "Back-End-Tcc",
     description: "Benchmark orchestration backend with 8 interconnected microservices.",
     longDescription:
-      "Clean architecture with service separation: auth, registry, catalog, submission, runner, scoring, and telemetry. Includes Docker setup, API specs, and GitHub Actions CI/CD.",
+      "Clean architecture: auth, registry, catalog, submission, runner, scoring, and telemetry services. Docker setup, full API specs, and GitHub Actions CI/CD pipeline.",
     tags: ["Go", "Microservices", "Docker", "GitHub Actions", "REST API"],
     githubUrl: "https://github.com/maktheus/Back-End-Tcc",
     featured: true,
@@ -121,7 +131,7 @@ export const projects: Project[] = [
     title: "Water Quality App",
     description: "Cross-platform monitoring app targeting iOS, Android, Desktop, and Web.",
     longDescription:
-      "Built with Kotlin and Compose Multiplatform, this app targets all major platforms from a single codebase. Includes comprehensive technical specs and design system documentation.",
+      "Built with Kotlin and Compose Multiplatform — single codebase targeting all major platforms. Includes comprehensive technical specs and design system documentation.",
     tags: ["Kotlin", "Compose Multiplatform", "iOS", "Android", "Desktop", "KMP"],
     githubUrl: "https://github.com/maktheus/Water-quality-app-composable",
     featured: true,
@@ -130,7 +140,7 @@ export const projects: Project[] = [
     title: "AI Studio Dashboard",
     description: "AI-powered dashboard with Google Gemini API integration.",
     longDescription:
-      "A modern web dashboard built with React and TypeScript, integrating Google Gemini API for AI capabilities. Deployed on Vercel with a clean, type-safe architecture.",
+      "Modern web dashboard (React + TypeScript) integrating Google Gemini API. Deployed on Vercel with a clean, type-safe architecture.",
     tags: ["React", "TypeScript", "Gemini API", "Vite", "Vercel"],
     githubUrl: "https://github.com/maktheus/ppge_dashboard_ufam_final",
     featured: false,

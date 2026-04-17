@@ -3,8 +3,9 @@ import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import Hero from "@/components/sections/Hero";
 import About from "@/components/sections/About";
+import Partners from "@/components/sections/Partners";
+import CareerChapters from "@/components/sections/CareerChapters";
 import Experience from "@/components/sections/Experience";
-import CompanyLogos from "@/components/ui/CompanyLogos";
 import Projects from "@/components/sections/Projects";
 import Research from "@/components/sections/Research";
 import Contact from "@/components/sections/Contact";
@@ -17,7 +18,11 @@ export default function Home() {
         <Hero />
         <div className="gradient-line" />
         <About />
-        <CompanyLogos />
+        <div className="gradient-line" />
+        <Partners />
+        <div className="gradient-line" />
+        <CareerChapters />
+        <div className="gradient-line" />
         <Experience />
         <div className="gradient-line" />
         <Projects />

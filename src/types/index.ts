@@ -15,6 +15,7 @@ export interface Project {
   tags: string[];
   githubUrl?: string;
   liveUrl?: string;
+  imageUrl?: string;
   featured?: boolean;
 }
 

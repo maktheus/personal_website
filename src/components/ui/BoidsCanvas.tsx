@@ -10,30 +10,56 @@ interface Boid {
   history: { x: number; y: number }[];
 }
 
-const BOID_COUNT = 80;
-const HISTORY_LEN = 8;
-const MAX_SPEED = 2.2;
-const MIN_SPEED = 0.8;
-const PERCEPTION_RADIUS = 80;
-const AVOID_RADIUS = 28;
-const MOUSE_RADIUS = 120;
-const MOUSE_STRENGTH = 0.6;
+// Reduced count + spatial grid = much lighter
+const BOID_COUNT = 48;
+const HISTORY_LEN = 6;
+const MAX_SPEED = 2.0;
+const MIN_SPEED = 0.7;
+const PERCEPTION_RADIUS = 90;
+const AVOID_RADIUS = 26;
+const MOUSE_RADIUS = 110;
+const MOUSE_STRENGTH = 0.55;
+const CELL_SIZE = PERCEPTION_RADIUS;
 
-// Steering weights
-const W_ALIGN = 0.9;
-const W_COHESION = 0.6;
-const W_SEPARATION = 1.4;
+const W_ALIGN = 0.85;
+const W_COHESION = 0.55;
+const W_SEPARATION = 1.3;
 
-function clampSpeed(vx: number, vy: number): [number, number] {
-  const speed = Math.sqrt(vx * vx + vy * vy);
-  if (speed === 0) return [0, 0];
-  if (speed > MAX_SPEED) {
-    return [(vx / speed) * MAX_SPEED, (vy / speed) * MAX_SPEED];
-  }
-  if (speed < MIN_SPEED) {
-    return [(vx / speed) * MIN_SPEED, (vy / speed) * MIN_SPEED];
-  }
+function clamp(vx: number, vy: number): [number, number] {
+  const s = Math.hypot(vx, vy);
+  if (s === 0) return [MIN_SPEED, 0];
+  if (s > MAX_SPEED) return [(vx / s) * MAX_SPEED, (vy / s) * MAX_SPEED];
+  if (s < MIN_SPEED) return [(vx / s) * MIN_SPEED, (vy / s) * MIN_SPEED];
   return [vx, vy];
+}
+
+// Spatial hash grid for O(n) neighbor lookups instead of O(n²)
+function buildGrid(boids: Boid[], W: number, H: number) {
+  const cols = Math.ceil(W / CELL_SIZE);
+  const rows = Math.ceil(H / CELL_SIZE);
+  const grid = new Map<number, number[]>();
+  for (let i = 0; i < boids.length; i++) {
+    const cx = Math.floor(boids[i].x / CELL_SIZE);
+    const cy = Math.floor(boids[i].y / CELL_SIZE);
+    const key = cy * cols + cx;
+    if (!grid.has(key)) grid.set(key, []);
+    grid.get(key)!.push(i);
+  }
+  return { grid, cols, rows };
+}
+
+function getNeighborCells(cx: number, cy: number, cols: number, rows: number) {
+  const cells: number[] = [];
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      const nx = cx + dx;
+      const ny = cy + dy;
+      if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
+        cells.push(ny * cols + nx);
+      }
+    }
+  }
+  return cells;
 }
 
 export default function BoidsCanvas() {
@@ -48,17 +74,21 @@ export default function BoidsCanvas() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    // Cap DPR at 1.5 for performance
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+
     function resize() {
       if (!canvas) return;
-      canvas.width = canvas.offsetWidth * window.devicePixelRatio;
-      canvas.height = canvas.offsetHeight * window.devicePixelRatio;
-      ctx!.scale(window.devicePixelRatio, window.devicePixelRatio);
+      const w = canvas.offsetWidth;
+      const h = canvas.offsetHeight;
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+      ctx!.setTransform(dpr, 0, 0, dpr, 0, 0);
     }
 
     resize();
-    window.addEventListener("resize", resize);
+    window.addEventListener("resize", resize, { passive: true });
 
-    // Init boids
     boidsRef.current = Array.from({ length: BOID_COUNT }, () => ({
       x: Math.random() * canvas.offsetWidth,
       y: Math.random() * canvas.offsetHeight,
@@ -68,78 +98,70 @@ export default function BoidsCanvas() {
     }));
 
     function update() {
-      if (!canvas || !ctx) return;
+      if (!canvas) return;
       const W = canvas.offsetWidth;
       const H = canvas.offsetHeight;
       const boids = boidsRef.current;
+      const { grid, cols, rows } = buildGrid(boids, W, H);
       const mx = mouseRef.current.x;
       const my = mouseRef.current.y;
 
       for (let i = 0; i < boids.length; i++) {
         const b = boids[i];
+        const cx = Math.floor(b.x / CELL_SIZE);
+        const cy = Math.floor(b.y / CELL_SIZE);
+        const neighborCells = getNeighborCells(cx, cy, cols, rows);
 
-        let alignX = 0, alignY = 0;
-        let cohX = 0, cohY = 0;
-        let sepX = 0, sepY = 0;
-        let count = 0;
+        let alignX = 0, alignY = 0, cohX = 0, cohY = 0, sepX = 0, sepY = 0, count = 0;
 
-        for (let j = 0; j < boids.length; j++) {
-          if (i === j) continue;
-          const o = boids[j];
-          const dx = o.x - b.x;
-          const dy = o.y - b.y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-
-          if (dist < PERCEPTION_RADIUS) {
-            alignX += o.vx;
-            alignY += o.vy;
-            cohX += o.x;
-            cohY += o.y;
-            count++;
-
-            if (dist < AVOID_RADIUS && dist > 0) {
-              sepX -= dx / dist;
-              sepY -= dy / dist;
+        for (const cell of neighborCells) {
+          const indices = grid.get(cell);
+          if (!indices) continue;
+          for (const j of indices) {
+            if (i === j) continue;
+            const o = boids[j];
+            const dx = o.x - b.x;
+            const dy = o.y - b.y;
+            const dist2 = dx * dx + dy * dy;
+            if (dist2 < PERCEPTION_RADIUS * PERCEPTION_RADIUS) {
+              alignX += o.vx; alignY += o.vy;
+              cohX += o.x; cohY += o.y;
+              count++;
+              if (dist2 < AVOID_RADIUS * AVOID_RADIUS && dist2 > 0) {
+                const dist = Math.sqrt(dist2);
+                sepX -= dx / dist;
+                sepY -= dy / dist;
+              }
             }
           }
         }
 
         if (count > 0) {
-          // Alignment
           b.vx += (alignX / count) * W_ALIGN * 0.02;
           b.vy += (alignY / count) * W_ALIGN * 0.02;
-          // Cohesion
           b.vx += ((cohX / count - b.x) * W_COHESION) * 0.0005;
           b.vy += ((cohY / count - b.y) * W_COHESION) * 0.0005;
-          // Separation
           b.vx += sepX * W_SEPARATION * 0.05;
           b.vy += sepY * W_SEPARATION * 0.05;
         }
 
-        // Mouse interaction — flee
-        const mdx = b.x - mx;
-        const mdy = b.y - my;
-        const mdist = Math.sqrt(mdx * mdx + mdy * mdy);
-        if (mdist < MOUSE_RADIUS && mdist > 0) {
-          const force = (1 - mdist / MOUSE_RADIUS) * MOUSE_STRENGTH;
-          b.vx += (mdx / mdist) * force;
-          b.vy += (mdy / mdist) * force;
+        // Mouse flee
+        const mdx = b.x - mx, mdy = b.y - my;
+        const md2 = mdx * mdx + mdy * mdy;
+        if (md2 < MOUSE_RADIUS * MOUSE_RADIUS && md2 > 0) {
+          const md = Math.sqrt(md2);
+          const force = (1 - md / MOUSE_RADIUS) * MOUSE_STRENGTH;
+          b.vx += (mdx / md) * force;
+          b.vy += (mdy / md) * force;
         }
 
-        [b.vx, b.vy] = clampSpeed(b.vx, b.vy);
+        [b.vx, b.vy] = clamp(b.vx, b.vy);
 
-        // Save history
         b.history.push({ x: b.x, y: b.y });
         if (b.history.length > HISTORY_LEN) b.history.shift();
 
-        b.x += b.vx;
-        b.y += b.vy;
-
-        // Wrap edges
-        if (b.x < 0) b.x += W;
-        if (b.x > W) b.x -= W;
-        if (b.y < 0) b.y += H;
-        if (b.y > H) b.y -= H;
+        b.x = (b.x + b.vx + W) % W;
+        b.y = (b.y + b.vy + H) % H;
       }
     }
 
@@ -149,69 +171,63 @@ export default function BoidsCanvas() {
       const H = canvas.offsetHeight;
       ctx.clearRect(0, 0, W, H);
 
-      const boids = boidsRef.current;
+      for (const b of boidsRef.current) {
+        const speed = Math.hypot(b.vx, b.vy);
+        const t = speed / MAX_SPEED;
 
-      for (let i = 0; i < boids.length; i++) {
-        const b = boids[i];
-        const speed = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
-        const t = speed / MAX_SPEED; // 0..1
-
-        // Tail
         if (b.history.length > 1) {
           ctx.beginPath();
           ctx.moveTo(b.history[0].x, b.history[0].y);
           for (let k = 1; k < b.history.length; k++) {
             ctx.lineTo(b.history[k].x, b.history[k].y);
           }
-          ctx.strokeStyle = `rgba(234, 242, 5, ${0.06 + t * 0.12})`;
-          ctx.lineWidth = 0.8;
+          ctx.strokeStyle = `rgba(229,178,26,${0.05 + t * 0.1})`;
+          ctx.lineWidth = 0.7;
           ctx.stroke();
         }
 
-        // Body — triangle pointing in direction of movement
         const angle = Math.atan2(b.vy, b.vx);
-        const size = 4 + t * 2;
+        const size = 3.5 + t * 2;
         ctx.save();
         ctx.translate(b.x, b.y);
         ctx.rotate(angle);
         ctx.beginPath();
         ctx.moveTo(size * 1.8, 0);
         ctx.lineTo(-size, size * 0.6);
-        ctx.lineTo(-size * 0.5, 0);
+        ctx.lineTo(-size * 0.4, 0);
         ctx.lineTo(-size, -size * 0.6);
         ctx.closePath();
 
-        // Gradient fill: accent yellow → deep gold
         const grad = ctx.createLinearGradient(-size, 0, size * 1.8, 0);
-        grad.addColorStop(0, `rgba(89, 76, 12, ${0.4 + t * 0.3})`);
-        grad.addColorStop(1, `rgba(234, 242, 5, ${0.7 + t * 0.3})`);
+        grad.addColorStop(0, `rgba(76,57,0,${0.35 + t * 0.3})`);
+        grad.addColorStop(1, `rgba(229,178,26,${0.65 + t * 0.35})`);
         ctx.fillStyle = grad;
         ctx.fill();
         ctx.restore();
       }
     }
 
-    function loop() {
+    let lastTime = 0;
+    const TARGET_FPS = 50; // cap at 50fps to reduce CPU
+    const FRAME_MIN = 1000 / TARGET_FPS;
+
+    function loop(ts: number) {
+      rafRef.current = requestAnimationFrame(loop);
+      if (ts - lastTime < FRAME_MIN) return;
+      lastTime = ts;
       update();
       draw();
-      rafRef.current = requestAnimationFrame(loop);
     }
 
     rafRef.current = requestAnimationFrame(loop);
 
     function onMouseMove(e: MouseEvent) {
       const rect = canvas!.getBoundingClientRect();
-      mouseRef.current = {
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top,
-      };
+      mouseRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
     }
+    function onMouseLeave() { mouseRef.current = { x: -9999, y: -9999 }; }
 
-    function onMouseLeave() {
-      mouseRef.current = { x: -9999, y: -9999 };
-    }
-
-    canvas.addEventListener("mousemove", onMouseMove);
+    canvas.addEventListener("mousemove", onMouseMove, { passive: true });
     canvas.addEventListener("mouseleave", onMouseLeave);
 
     return () => {
@@ -226,7 +242,6 @@ export default function BoidsCanvas() {
     <canvas
       ref={canvasRef}
       className="absolute inset-0 w-full h-full"
-      style={{ pointerEvents: "auto" }}
       aria-hidden="true"
     />
   );
