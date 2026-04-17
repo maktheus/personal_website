@@ -1,11 +1,9 @@
-import type { NextConfig } from "next";
-
+/** @type {import('next').NextConfig} */
 const isProd = process.env.NODE_ENV === "production";
 const repoName = "personal_website";
 
-const nextConfig: NextConfig = {
+const nextConfig = {
   output: "export",
-  // Use basePath only when deploying to GitHub Pages (not on custom domain)
   basePath: isProd ? `/${repoName}` : "",
   assetPrefix: isProd ? `/${repoName}/` : "",
   images: {
