@@ -1,3 +1,4 @@
+import AppShell from "@/components/layout/AppShell";
 import LenisProvider from "@/components/layout/LenisProvider";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
@@ -12,26 +13,28 @@ import Contact from "@/components/sections/Contact";
 
 export default function Home() {
   return (
-    <LenisProvider>
-      <Header />
-      <main>
-        <Hero />
-        <div className="gradient-line" />
-        <About />
-        <div className="gradient-line" />
-        <Partners />
-        <div className="gradient-line" />
-        <CareerChapters />
-        <div className="gradient-line" />
-        <Experience />
-        <div className="gradient-line" />
-        <Projects />
-        <div className="gradient-line" />
-        <Research />
-        <div className="gradient-line" />
-        <Contact />
-      </main>
-      <Footer />
-    </LenisProvider>
+    <AppShell>
+      <LenisProvider>
+        <Header />
+        <main>
+          <Hero />
+          <div className="gradient-line" />
+          <About />
+          <div className="gradient-line" />
+          <Partners />
+          <div className="gradient-line" />
+          <CareerChapters />
+          <div className="gradient-line" />
+          <Experience />
+          <div className="gradient-line" />
+          <Projects />
+          <div className="gradient-line" />
+          <Research />
+          <div className="gradient-line" />
+          <Contact />
+        </main>
+        <Footer />
+      </LenisProvider>
+    </AppShell>
   );
 }
