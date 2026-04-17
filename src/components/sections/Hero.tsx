@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import { scrollTo } from "@/lib/lenis";
 import { personal } from "@/lib/data";
 
-const CameraAudioCanvas = dynamic(() => import("@/components/ui/CameraAudioCanvas"), {
+const BoidsCanvas = dynamic(() => import("@/components/ui/BoidsCanvas"), {
   ssr: false,
 });
 
@@ -25,10 +25,10 @@ export default function Hero() {
     >
       {/* Boids live in the bottom-right corner area */}
       <div
-        className="absolute bottom-0 right-0 w-full h-full pointer-events-none"
+        className="absolute bottom-0 right-0 w-full h-full opacity-70 pointer-events-none md:pointer-events-auto"
         aria-hidden="true"
       >
-        <CameraAudioCanvas />
+        <BoidsCanvas />
       </div>
 
       {/* Radial fade so boids don't cover text */}
