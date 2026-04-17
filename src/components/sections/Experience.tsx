@@ -45,6 +45,7 @@ export default function Experience() {
           </div>
         </div>
       </div>
+      </div>
     </SectionWrapper>
   );
 }
