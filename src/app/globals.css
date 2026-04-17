@@ -4,20 +4,20 @@
 
 /* ─── Design tokens ───────────────────────────────────── */
 :root {
-  /* dark theme (default) */
-  --bg: #0d0d0d;
-  --bg-secondary: #111111;
-  --bg-card: #161616;
-  --text: #f0f0f0;
-  --text-muted: #777777;
-  --accent: #eaf205;
-  --accent-warm: #f2e205;
-  --accent-mid: #a69b0a;
-  --accent-deep: #594c0c;
-  --accent-dim: rgba(234, 242, 5, 0.10);
-  --accent-glow: rgba(234, 242, 5, 0.25);
-  --border-color: rgba(255, 255, 255, 0.07);
-  --border-accent: rgba(234, 242, 5, 0.2);
+  /* dark theme (default) - Death Stranding style */
+  --bg: #0b0d0a;
+  --bg-secondary: #0f120e;
+  --bg-card: #141813;
+  --text: #e1e6e1;
+  --text-muted: #727f72;
+  --accent: #e5b21a; /* Chiral Gold */
+  --accent-warm: #d97711; /* Odradek Amber */
+  --accent-mid: #997300;
+  --accent-deep: #4c3900;
+  --accent-dim: rgba(229, 178, 26, 0.12);
+  --accent-glow: rgba(229, 178, 26, 0.22);
+  --border-color: rgba(255, 255, 255, 0.05);
+  --border-accent: rgba(229, 178, 26, 0.25);
 }
 
 .light {

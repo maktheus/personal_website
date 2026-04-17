@@ -14,11 +14,11 @@ const config: Config = {
         mono: ["var(--font-geist-mono)", "monospace"],
       },
       colors: {
-        accent: "#EAF205",
-        "accent-warm": "#F2E205",
-        "accent-mid": "#A69B0A",
-        "accent-deep": "#594C0C",
-        "bg-dark": "#0D0D0D",
+        accent: "#e5b21a",
+        "accent-warm": "#d97711",
+        "accent-mid": "#997300",
+        "accent-deep": "#4c3900",
+        "bg-dark": "#0b0d0a",
       },
       animation: {
         marquee: "marquee 35s linear infinite",
