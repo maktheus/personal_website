@@ -265,8 +265,8 @@ export const marqueeSkills = [
 export const personal = {
   name: "Matheus Serrão Uchôa",
   title: "Software Engineer",
-  subtitle: "KMP · Android AOSP · AI/ML Systems",
-  location: "Manaus, AM — Open to remote / relocation",
+  subtitle: "KMP · Android (AOSP) · iOS · AI/ML Systems",
+  location: "Manaus, Amazonas, Brazil",
   bio: "Software Engineer with 6+ years of shipping robust products across embedded Android (AOSP), AI pipelines, and cross-platform mobile apps. Currently at Stone building scalable B2B systems leveraging Kotlin Multiplatform (KMP) to deliver high-performance, maintainable solutions. My R&D background includes collaborations with CESAR, Motorola, and TPV, yielding 12+ published academic papers. I specialize in bridging academic research with production-grade engineering, focusing on machine learning, system-level optimization, and scalable architectures.",
   email: "maktheus@gmail.com",
   linkedin: "https://www.linkedin.com/in/maktheus",

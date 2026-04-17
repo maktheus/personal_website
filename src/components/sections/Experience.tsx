@@ -10,35 +10,35 @@ const CameraAudioCanvas = dynamic(() => import("@/components/ui/CameraAudioCanva
 export default function Experience() {
   return (
     <SectionWrapper id="experience">
-      <div className="container">
+      <div className="relative w-full overflow-hidden min-h-screen">
+        {/* Immersive Camera Audio Background for the whole section */}
+        <div className="absolute inset-0 z-0 pointer-events-none mix-blend-screen opacity-100">
+          <CameraAudioCanvas />
+          {/* Soft fading gradients to blend with adjacent sections */}
+          <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-[var(--bg)] to-transparent pointer-events-none" />
+          <div className="absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-[var(--bg)] to-transparent pointer-events-none" />
+        </div>
+
+        <div className="container relative z-10 py-16">
         <p className="section-label">Experience</p>
 
         <div className="grid md:grid-cols-[1fr_2fr] gap-16">
-          {/* Left sticky heading with CameraAudio bg */}
-          <div className="md:sticky md:top-24 md:self-start relative z-10 overflow-hidden rounded-2xl border" style={{ background: "var(--bg)", borderColor: "var(--border-color)" }}>
-            
-            <div className="absolute inset-0 z-0 pointer-events-none">
-              <CameraAudioCanvas />
-              {/* Add a subtle gradient overlay to ensure text is readable */}
-              <div className="absolute inset-0 bg-gradient-to-t from-[var(--bg-card)]/80 to-[var(--bg)]/10 pointer-events-none" />
-            </div>
-
-            <div className="relative z-10 p-8 sm:p-10 backdrop-blur-sm bg-[var(--bg)]/30">
-              <h2
-                className="text-3xl sm:text-4xl font-bold mb-4 drop-shadow-lg shadow-black"
-                style={{ letterSpacing: "-0.03em" }}
-              >
-                6+ years of<br />
-                <span style={{ color: "var(--accent)" }}>shipping</span>
-              </h2>
-              <p className="text-sm sm:text-base leading-relaxed drop-shadow-md text-white font-medium" style={{ textShadow: "0px 2px 4px rgba(0,0,0,0.8)" }}>
-                From embedded Android systems to AI pipelines and cross-platform mobile — across research labs, product companies, and consulting.
-              </p>
-            </div>
+          {/* Left sticky heading */}
+          <div className="md:sticky md:top-32 md:self-start">
+            <h2
+              className="text-4xl sm:text-5xl font-bold mb-6 drop-shadow-md"
+              style={{ letterSpacing: "-0.03em" }}
+            >
+              6+ years of<br />
+              <span style={{ color: "var(--accent)" }}>shipping.</span>
+            </h2>
+            <p className="text-base sm:text-lg leading-relaxed text-[var(--text-muted)] drop-shadow-sm max-w-sm">
+              From embedded Android systems to AI pipelines and cross-platform mobile — across research labs, product companies, and consulting.
+            </p>
           </div>
 
           {/* Timeline */}
-          <div className="relative">
+          <div className="relative z-10 mt-12 md:mt-0">
             {experiences.map((exp, i) => (
               <TimelineItem key={exp.company + exp.role} experience={exp} index={i} />
             ))}
