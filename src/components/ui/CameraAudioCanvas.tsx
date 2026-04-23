@@ -81,7 +81,7 @@ export default function CameraAudioCanvas() {
     let video: HTMLVideoElement | null = null;
     let worker: Worker | null = null;
     let workerUrl: string | null = null;
-    let dataArray: Uint8Array | null = null;
+    let dataArray: Uint8Array<ArrayBuffer> | null = null;
     let rafId = 0;
     let lastFrameTime = 0;
     let time = 0;
@@ -143,7 +143,7 @@ export default function CameraAudioCanvas() {
         analyser.smoothingTimeConstant = 0.7;
         const src = audioCtx.createMediaStreamSource(stream);
         src.connect(analyser);
-        dataArray = new Uint8Array(analyser.frequencyBinCount);
+        dataArray = new Uint8Array(analyser.frequencyBinCount) as Uint8Array<ArrayBuffer>;
 
         const canvas = canvasRef.current;
         if (!canvas) return;
