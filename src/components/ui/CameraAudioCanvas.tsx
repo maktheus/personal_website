@@ -5,27 +5,65 @@ import { useEffect, useRef, useState } from "react";
 const TARGET_FPS = 24;
 const FRAME_MIN = 1000 / TARGET_FPS;
 
-// Inline Web Worker — runs pixel processing + canvas rendering off the main thread
+/*
+ * process_pixels.wasm — compiled from src/wasm/process_pixels.c using:
+ *   clang --target=wasm32 -nostdlib -Wl,--no-entry
+ *         -Wl,--export=process_cells -Wl,--export=get_px_ptr -Wl,--export=get_out_ptr
+ *         -O3 -o process_pixels.wasm process_pixels.c
+ *
+ * Embeds as base64 so the inline Worker blob can load it without fetch/CORS.
+ * Exports: get_px_ptr() → u8*, get_out_ptr() → f32*, process_cells(cols,rows,vol,time,H,step)
+ */
+const WASM_B64 =
+  "AGFzbQEAAAABDgJgAAF/YAZ/f319fX8AAwQDAAABBAUBcAEBAQUDAQAGBggBfwFBgMwXCwc1BAZtZW1vcnkCAApnZXRfcHhfcHRyAAALZ2V0X291dF9wdHIAAQ1wcm9jZXNzX2NlbGxzAAIKjAQDCABBgIiAgAALCABBgPmEgAAL9wMGAn0BfwR9BX8BfQJ/AkACQCADQwAAIEGUIgYgBJUiB4tDAAAAT11FDQAgB6ghCAwBC0GAgICAeCEICwJAIAFBAUgNACAAQQFIDQAgBiAIsiAElJMhCSACQwAA8EGUIQogBbIhCyACQwAAIEGUIQwgAEECdCENIABBDGwhDkEAIQ9BgPmEgAAhEEGAiICAACERA0AgCyAPspQhEiARIQUgECEIQQAhEwNAIAggBS0AALMgBUEBai0AALOSIAVBAmotAACzkkMAQD9ElSICOAIAIAhBCGogAkMAAIBAlCAMIAKUkjgCAAJAAkAgE7JDzczMPZQgA5IiAkPbD8lAlSIHi0MAAABPXUUNACAHqCEUDAELQYCAgIB4IRQLAkACQCASIAogAiAUskPbD8lAlJMiAkPbD8lAkiACIAJDAAAAAF0bIgJD2w9JwJIgAiACQ9sPSUBeIhQbIgJDAACAQZRD2w9JQCACkyIHlCIGjCAGIBQbIAJDAACAwJQgB5RDYWRFQpKVlJIgCZMgBJIiAiAElSIHi0MAAABPXUUNACAHqCEUDAELQYCAgIB4IRQLIAhBBGogAiAUsiAElJM4AgAgBUEEaiEFIAhBDGohCCAAIBNBAWoiE0cNAAsgESANaiERIBAgDmohECAPQQFqIg8gAUcNAAsLCwBaBG5hbWUAFBNwcm9jZXNzX3BpeGVscy53YXNtASkDAApnZXRfcHhfcHRyAQtnZXRfb3V0X3B0cgINcHJvY2Vzc19jZWxscwcSAQAPX19zdGFja19wb2ludGVyADgJcHJvZHVjZXJzAQxwcm9jZXNzZWQtYnkBDFVidW50dSBjbGFuZxExOC4xLjMgKDF1YnVudHUxKQAsD3RhcmdldF9mZWF0dXJlcwIrD211dGFibGUtZ2xvYmFscysIc2lnbi1leHQ=";
+
+// Inline Web Worker — pixel math runs in C/WASM; canvas draw stays JS
 const WORKER_SRC = `
+const WASM_B64 = "${WASM_B64}";
+const STEP = 24;
+
 let canvas, ctx;
 const offCanvas = new OffscreenCanvas(1, 1);
 const offCtx = offCanvas.getContext('2d', { willReadFrequently: true });
 let W = 0, H = 0;
-const STEP = 24;
+
+// WASM handles
+let wasm = null;
+let pxPtr = 0, outPtr = 0;
+let wasmMem = null;
+
+// Decode base64 → ArrayBuffer
+function b64ToBuffer(b64) {
+  const bin = atob(b64);
+  const buf = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+  return buf.buffer;
+}
+
+// Boot WASM module (synchronous instantiation from ArrayBuffer)
+async function initWasm() {
+  const buf = b64ToBuffer(WASM_B64);
+  const { instance } = await WebAssembly.instantiate(buf, {});
+  wasm     = instance.exports;
+  wasmMem  = new DataView(wasm.memory.buffer);
+  pxPtr    = wasm.get_px_ptr();
+  outPtr   = wasm.get_out_ptr();
+}
 
 function applyDpr(w, h, dpr) {
   const d = Math.min(dpr, 1.5);
-  canvas.width = Math.round(w * d);
+  canvas.width  = Math.round(w * d);
   canvas.height = Math.round(h * d);
   ctx = canvas.getContext('2d');
   ctx.scale(d, d);
   W = w; H = h;
 }
 
-self.onmessage = function({ data }) {
+self.onmessage = async function({ data }) {
   if (data.type === 'init') {
     canvas = data.canvas;
     applyDpr(data.W, data.H, data.dpr);
+    await initWasm();
   } else if (data.type === 'resize') {
     if (canvas) applyDpr(data.W, data.H, data.dpr);
   } else if (data.type === 'frame') {
@@ -35,35 +73,44 @@ self.onmessage = function({ data }) {
 };
 
 function renderFrame(bitmap, audioVolume, time) {
-  if (!ctx || !W || !H) return;
+  if (!ctx || !W || !H || !wasm) return;
   const cols = Math.floor(W / STEP);
   const rows = Math.floor(H / STEP);
+  const cells = cols * rows;
 
-  offCanvas.width = cols;
+  // Downsample video frame to grid resolution via OffscreenCanvas
+  offCanvas.width  = cols;
   offCanvas.height = rows;
   offCtx.save();
   offCtx.scale(-1, 1);
   offCtx.drawImage(bitmap, -cols, 0, cols, rows);
   offCtx.restore();
-  const px = offCtx.getImageData(0, 0, cols, rows).data;
+  const rawPx = offCtx.getImageData(0, 0, cols, rows).data; // Uint8ClampedArray
 
+  // Copy pixel data into WASM linear memory
+  new Uint8Array(wasm.memory.buffer, pxPtr, cells * 4).set(rawPx.subarray(0, cells * 4));
+
+  // Run the tight C loop — brightness, wave, size computation
+  wasm.process_cells(cols, rows, audioVolume, time, H, STEP);
+
+  // Read output float array from WASM memory
+  const out = new Float32Array(wasm.memory.buffer, outPtr, cells * 3);
+
+  // Canvas 2D rendering — draw calls remain in JS
   ctx.clearRect(0, 0, W, H);
-  ctx.shadowBlur = 12;
+  ctx.shadowBlur  = 12;
   ctx.shadowColor = 'rgba(229,178,26,' + (audioVolume * 0.8 + 0.2) + ')';
 
-  for (let y = 0; y < rows; y++) {
-    for (let x = 0; x < cols; x++) {
-      const i = (y * cols + x) * 4;
-      const bNorm = (px[i] + px[i + 1] + px[i + 2]) / 765;
-      if (bNorm <= 0.1) continue;
-      const waveY = Math.sin(x * 0.1 + time) * (audioVolume * 30);
-      const ry = (y * STEP + waveY - (time * 10) % H + H) % H;
-      const size = bNorm * 4 + audioVolume * 10 * bNorm;
-      ctx.beginPath();
-      ctx.roundRect(x * STEP + STEP * 0.5 - size, ry + STEP * 0.5 - size * 1.5, size * 2, size * 3, size * 0.5);
-      ctx.fillStyle = 'rgba(229,178,26,' + Math.min(1, bNorm * 0.9 + audioVolume * 0.5) + ')';
-      ctx.fill();
-    }
+  for (let cell = 0; cell < cells; cell++) {
+    const bNorm = out[cell * 3];
+    if (bNorm <= 0.1) continue;
+    const x    = cell % cols;
+    const ry   = out[cell * 3 + 1];
+    const size = out[cell * 3 + 2];
+    ctx.beginPath();
+    ctx.roundRect(x * STEP + STEP * 0.5 - size, ry + STEP * 0.5 - size * 1.5, size * 2, size * 3, size * 0.5);
+    ctx.fillStyle = 'rgba(229,178,26,' + Math.min(1, bNorm * 0.9 + audioVolume * 0.5) + ')';
+    ctx.fill();
   }
   ctx.shadowBlur = 0;
 }
@@ -151,7 +198,6 @@ export default function CameraAudioCanvas() {
         try {
           offscreen = canvas.transferControlToOffscreen();
         } catch {
-          // already transferred in dev strict-mode double-invoke
           return;
         }
 
@@ -160,7 +206,7 @@ export default function CameraAudioCanvas() {
         worker = new Worker(workerUrl);
         worker.postMessage(
           { type: "init", canvas: offscreen, W: canvas.offsetWidth, H: canvas.offsetHeight, dpr: window.devicePixelRatio },
-          [offscreen]
+          [offscreen!]
         );
         workerReady = true;
 
