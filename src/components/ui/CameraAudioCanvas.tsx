@@ -2,44 +2,68 @@
 
 import { useEffect, useRef, useState } from "react";
 
-// Adaptive config — mobile gets far fewer ops per second
-const MOBILE = typeof window !== "undefined" && ("ontouchstart" in window || navigator.maxTouchPoints > 0);
+/*
+ * process_pixels.wasm — compiled from src/wasm/process_pixels.c using:
+ *   clang --target=wasm32 -nostdlib -Wl,--no-entry
+ *         -Wl,--export=process_cells -Wl,--export=get_px_ptr -Wl,--export=get_out_ptr
+ *         -O3 -o process_pixels.wasm process_pixels.c
+ *
+ * Embeds as base64 so the inline Worker blob can load it without fetch/CORS.
+ * Exports: get_px_ptr() → u8*, get_out_ptr() → f32*, process_cells(cols,rows,vol,time,H,step)
+ */
+const WASM_B64 =
+  "AGFzbQEAAAABDgJgAAF/YAZ/f319fX8AAwQDAAABBAUBcAEBAQUDAQAGBggBfwFBgMwXCwc1BAZtZW1vcnkCAApnZXRfcHhfcHRyAAALZ2V0X291dF9wdHIAAQ1wcm9jZXNzX2NlbGxzAAIKjAQDCABBgIiAgAALCABBgPmEgAAL9wMGAn0BfwR9BX8BfQJ/AkACQCADQwAAIEGUIgYgBJUiB4tDAAAAT11FDQAgB6ghCAwBC0GAgICAeCEICwJAIAFBAUgNACAAQQFIDQAgBiAIsiAElJMhCSACQwAA8EGUIQogBbIhCyACQwAAIEGUIQwgAEECdCENIABBDGwhDkEAIQ9BgPmEgAAhEEGAiICAACERA0AgCyAPspQhEiARIQUgECEIQQAhEwNAIAggBS0AALMgBUEBai0AALOSIAVBAmotAACzkkMAQD9ElSICOAIAIAhBCGogAkMAAIBAlCAMIAKUkjgCAAJAAkAgE7JDzczMPZQgA5IiAkPbD8lAlSIHi0MAAABPXUUNACAHqCEUDAELQYCAgIB4IRQLAkACQCASIAogAiAUskPbD8lAlJMiAkPbD8lAkiACIAJDAAAAAF0bIgJD2w9JwJIgAiACQ9sPSUBeIhQbIgJDAACAQZRD2w9JQCACkyIHlCIGjCAGIBQbIAJDAACAwJQgB5RDYWRFQpKVlJIgCZMgBJIiAiAElSIHi0MAAABPXUUNACAHqCEUDAELQYCAgIB4IRQLIAhBBGogAiAUsiAElJM4AgAgBUEEaiEFIAhBDGohCCAAIBNBAWoiE0cNAAsgESANaiERIBAgDmohECAPQQFqIg8gAUcNAAsLCwBaBG5hbWUAFBNwcm9jZXNzX3BpeGVscy53YXNtASkDAApnZXRfcHhfcHRyAQtnZXRfb3V0X3B0cgINcHJvY2Vzc19jZWxscwcSAQAPX19zdGFja19wb2ludGVyADgJcHJvZHVjZXJzAQxwcm9jZXNzZWQtYnkBDFVidW50dSBjbGFuZxExOC4xLjMgKDF1YnVudHUxKQAsD3RhcmdldF9mZWF0dXJlcwIrD211dGFibGUtZ2xvYmFscysIc2lnbi1leHQ=";
 
-const CFG = {
-  fps:           MOBILE ? 15   : 24,    // animation rate
-  videoInterval: MOBILE ? 400  : 160,   // ms between video pixel samples
-  step:          MOBILE ? 40   : 28,    // px grid spacing (fewer = more particles)
-  camW:          MOBILE ? 160  : 320,
-  camH:          MOBILE ? 120  : 240,
-};
-
-// Worker: owns OffscreenCanvas + particle cache
-// - 'videoFrame' → expensive getImageData, rebuilds particle list (low freq)
-// - 'audioTick'  → cheap re-render using cached particles (animation freq)
+// Worker:
+// - 'videoFrame' → WASM pixel loop builds particle cache (low freq: 3-6 FPS)
+// - 'audioTick'  → lightweight re-render from cache (animation freq: 15-24 FPS)
+// No shadowBlur — replaced with cheap two-layer alpha halo (mobile GPU safe)
 const WORKER_SRC = `
+const WASM_B64 = "${WASM_B64}";
+let STEP = 28;
+
 let canvas, ctx;
 const offCanvas = new OffscreenCanvas(1, 1);
 const offCtx = offCanvas.getContext('2d', { willReadFrequently: true });
-let W = 0, H = 0, STEP = 28;
+let W = 0, H = 0;
 
-// Flat typed array: [x0, y0, b0, x1, y1, b1, ...]
+let wasm = null;
+let pxPtr = 0, outPtr = 0;
+
+// Flat particle cache [gridX, gridY, bNorm, ...] rebuilt only on videoFrame
 let particles = new Float32Array(0);
 let particleCount = 0;
 
+function b64ToBuffer(b64) {
+  const bin = atob(b64);
+  const buf = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+  return buf.buffer;
+}
+
+async function initWasm() {
+  const buf = b64ToBuffer(WASM_B64);
+  const { instance } = await WebAssembly.instantiate(buf, {});
+  wasm   = instance.exports;
+  pxPtr  = wasm.get_px_ptr();
+  outPtr = wasm.get_out_ptr();
+}
+
 function applyDpr(w, h, dpr) {
   const d = Math.min(dpr, 1.5);
-  canvas.width = Math.round(w * d);
+  canvas.width  = Math.round(w * d);
   canvas.height = Math.round(h * d);
   ctx = canvas.getContext('2d');
   ctx.scale(d, d);
   W = w; H = h;
 }
 
-self.onmessage = function({ data }) {
+self.onmessage = async function({ data }) {
   if (data.type === 'init') {
     canvas = data.canvas;
     STEP = data.step;
     applyDpr(data.W, data.H, data.dpr);
+    await initWasm();
   } else if (data.type === 'resize') {
     if (canvas) { STEP = data.step; applyDpr(data.W, data.H, data.dpr); }
   } else if (data.type === 'videoFrame') {
@@ -51,62 +75,60 @@ self.onmessage = function({ data }) {
 };
 
 function processVideo(bitmap) {
-  if (!W || !H) return;
-  const cols = Math.floor(W / STEP);
-  const rows = Math.floor(H / STEP);
-  offCanvas.width = cols;
+  if (!wasm || !W || !H) return;
+  const cols  = Math.floor(W / STEP);
+  const rows  = Math.floor(H / STEP);
+  const cells = cols * rows;
+
+  offCanvas.width  = cols;
   offCanvas.height = rows;
   offCtx.save();
   offCtx.scale(-1, 1);
   offCtx.drawImage(bitmap, -cols, 0, cols, rows);
   offCtx.restore();
-  const px = offCtx.getImageData(0, 0, cols, rows).data;
+  const rawPx = offCtx.getImageData(0, 0, cols, rows).data;
 
-  // Reuse buffer if big enough
-  const maxParticles = cols * rows;
-  if (particles.length < maxParticles * 3) particles = new Float32Array(maxParticles * 3);
+  // WASM C loop: brightness threshold + per-cell math
+  // vol=0, time=0 → only bNorm matters here; wave/float recomputed at render time
+  new Uint8Array(wasm.memory.buffer, pxPtr, cells * 4).set(rawPx.subarray(0, cells * 4));
+  wasm.process_cells(cols, rows, 0, 0, H, STEP);
+  const out = new Float32Array(wasm.memory.buffer, outPtr, cells * 3);
+
+  if (particles.length < cells * 3) particles = new Float32Array(cells * 3);
   particleCount = 0;
-
-  for (let y = 0; y < rows; y++) {
-    for (let x = 0; x < cols; x++) {
-      const i = (y * cols + x) * 4;
-      const b = (px[i] + px[i + 1] + px[i + 2]) / 765;
-      if (b > 0.12) {
-        const j = particleCount * 3;
-        particles[j] = x;
-        particles[j + 1] = y;
-        particles[j + 2] = b;
-        particleCount++;
-      }
-    }
+  for (let cell = 0; cell < cells; cell++) {
+    const bNorm = out[cell * 3];
+    if (bNorm <= 0.1) continue;
+    const j = particleCount * 3;
+    particles[j]     = cell % cols;
+    particles[j + 1] = Math.floor(cell / cols);
+    particles[j + 2] = bNorm;
+    particleCount++;
   }
 }
 
 function render(audioVolume, time) {
   if (!ctx || !W || !H || !particleCount) return;
   ctx.clearRect(0, 0, W, H);
-
-  // No shadowBlur — too expensive on mobile GPU
-  // Fake depth via two-layer draw: faint halo + bright core
   const scroll = (time * 10) % H;
 
   for (let i = 0; i < particleCount; i++) {
-    const j = i * 3;
-    const x = particles[j], y = particles[j + 1], b = particles[j + 2];
-    const waveY = Math.sin(x * 0.1 + time) * (audioVolume * 30);
-    const ry = (y * STEP + waveY - scroll + H) % H;
-    const size = b * 4 + audioVolume * 10 * b;
+    const j     = i * 3;
+    const gx    = particles[j], gy = particles[j + 1], b = particles[j + 2];
+    const waveY = Math.sin(gx * 0.1 + time) * (audioVolume * 30);
+    const ry    = (gy * STEP + waveY - scroll + H) % H;
+    const size  = b * 4 + audioVolume * 10 * b;
     const alpha = Math.min(1, b * 0.9 + audioVolume * 0.5);
 
-    // Halo (large, faint)
+    // Faint halo — replaces shadowBlur (no GPU blur pass)
     ctx.beginPath();
-    ctx.roundRect(x * STEP + STEP * 0.5 - size * 1.6, ry + STEP * 0.5 - size * 2, size * 3.2, size * 4, size);
+    ctx.roundRect(gx * STEP + STEP * 0.5 - size * 1.6, ry + STEP * 0.5 - size * 2, size * 3.2, size * 4, size);
     ctx.fillStyle = 'rgba(229,178,26,' + (alpha * 0.18) + ')';
     ctx.fill();
 
-    // Core (sharp)
+    // Bright core
     ctx.beginPath();
-    ctx.roundRect(x * STEP + STEP * 0.5 - size, ry + STEP * 0.5 - size * 1.5, size * 2, size * 3, size * 0.5);
+    ctx.roundRect(gx * STEP + STEP * 0.5 - size, ry + STEP * 0.5 - size * 1.5, size * 2, size * 3, size * 0.5);
     ctx.fillStyle = 'rgba(229,178,26,' + alpha + ')';
     ctx.fill();
   }
@@ -121,11 +143,11 @@ export default function CameraAudioCanvas() {
   useEffect(() => {
     const mobile = "ontouchstart" in window || navigator.maxTouchPoints > 0;
     const cfg = {
-      fps:           mobile ? 15   : 24,
-      videoInterval: mobile ? 400  : 160,
-      step:          mobile ? 40   : 28,
-      camW:          mobile ? 160  : 320,
-      camH:          mobile ? 120  : 240,
+      fps:           mobile ? 15  : 24,
+      videoInterval: mobile ? 400 : 160,  // ms between getImageData+WASM calls
+      step:          mobile ? 40  : 28,
+      camW:          mobile ? 160 : 320,
+      camH:          mobile ? 120 : 240,
     };
     const FRAME_MIN = 1000 / cfg.fps;
 
@@ -215,7 +237,7 @@ export default function CameraAudioCanvas() {
 
         let offscreen: OffscreenCanvas;
         try { offscreen = canvas.transferControlToOffscreen(); }
-        catch { return; } // strict-mode double-invoke guard
+        catch { return; }
 
         const blob = new Blob([WORKER_SRC], { type: "application/javascript" });
         workerUrl = URL.createObjectURL(blob);
